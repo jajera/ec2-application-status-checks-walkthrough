@@ -1,0 +1,75 @@
+---
+title: Teardown
+description: Delete the application status check, wait for the managed ENI, then destroy the lab VPC, instance, IAM profile, and optional Auto Scaling group.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Delete the check **before** the VPC. The managed ENI blocks `delete-vpc` until
+AWS removes it.
+
+## Optional Auto Scaling lab
+
+```bash
+aws autoscaling update-auto-scaling-group \
+  --auto-scaling-group-name "$NAME" --min-size 0 --desired-capacity 0 || true
+aws autoscaling delete-auto-scaling-group \
+  --auto-scaling-group-name "$NAME" --force-delete || true
+aws ec2 delete-launch-template --launch-template-name "$NAME" || true
+```
+
+## Check and alarm
+
+```bash
+aws cloudwatch delete-alarms --alarm-names "${NAME}-app-status" || true
+
+aws ec2 delete-application-status-check \
+  --application-status-check-id "$ASC_ID"
+```
+
+<Aside type="caution">If aggregation was `included` on an Auto Scaling group, delete or exclude before a maintenance window. Otherwise replacements continue until the check is gone.</Aside>
+
+Wait until the managed ENI is gone:
+
+```bash
+for i in $(seq 1 30); do
+  COUNT=$(aws ec2 describe-network-interfaces \
+    --filters "Name=vpc-id,Values=${VPC_ID}" \
+    --query 'length(NetworkInterfaces)' --output text)
+  echo "ENIs in VPC: $COUNT"
+  [ "$COUNT" = "1" ] || [ "$COUNT" = "0" ] && break
+  sleep 10
+done
+```
+
+(Your instance ENI is still present until terminate. After terminate, wait for
+zero ENIs before `delete-vpc`.)
+
+## Instance, IAM, VPC
+
+```bash
+aws ec2 terminate-instances --instance-ids "$INSTANCE_ID"
+aws ec2 wait instance-terminated --instance-ids "$INSTANCE_ID"
+
+aws iam remove-role-from-instance-profile \
+  --instance-profile-name "$NAME-ssm" --role-name "$NAME-ssm" || true
+aws iam delete-instance-profile --instance-profile-name "$NAME-ssm" || true
+aws iam detach-role-policy \
+  --role-name "$NAME-ssm" \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore || true
+aws iam delete-role --role-name "$NAME-ssm" || true
+
+aws ec2 delete-security-group --group-id "$SG_ID"
+
+ASSOC_ID=$(aws ec2 describe-route-tables --route-table-ids "$RTB_ID" \
+  --query 'RouteTables[0].Associations[?SubnetId!=`null`].RouteTableAssociationId | [0]' \
+  --output text)
+aws ec2 disassociate-route-table --association-id "$ASSOC_ID"
+aws ec2 delete-route --route-table-id "$RTB_ID" --destination-cidr-block 0.0.0.0/0
+aws ec2 delete-route-table --route-table-id "$RTB_ID"
+
+aws ec2 detach-internet-gateway --internet-gateway-id "$IGW_ID" --vpc-id "$VPC_ID"
+aws ec2 delete-internet-gateway --internet-gateway-id "$IGW_ID"
+aws ec2 delete-subnet --subnet-id "$SUBNET_ID"
+aws ec2 delete-vpc --vpc-id "$VPC_ID"
+```

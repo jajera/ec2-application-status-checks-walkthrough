@@ -1,0 +1,57 @@
+---
+title: Troubleshooting
+description: Reason codes, common mistakes, and a checklist when an application status check reports failed or impaired.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## Checklist
+
+1. Instance and system status checks are `ok`.
+2. Destination security group allows the check port from the **source**
+   security group (AWS-provided or the one you set on customer-managed paths).
+3. Host firewall allows the same port.
+4. `curl` to `localhost:PORT/PATH` on the instance returns a matcher code.
+5. Protocol matches (HTTP vs HTTPS) and `--port` is the instance listener
+   (`8081`, `8443`, …), not the ALB listener unless the app really binds there.
+6. Path exists (not `404`) and is unauthenticated (not `401`/`403`).
+7. Path does not redirect unless `301`/`302` are in the matcher.
+8. Customer-managed paths: source subnet can reach destination (VPC
+   Reachability Analyzer).
+9. ENIs-per-VPC quota has headroom for the managed ENI.
+
+## Reason codes
+
+| Code                   | Meaning                                 |
+| ---------------------- | --------------------------------------- |
+| `ResponseCodeMatched`  | HTTP status is in `StatusCodeMatcher`   |
+| `ResponseCodeMismatch` | HTTP status is not in the matcher       |
+| `ConnectionTimeout`    | SYN never completed                     |
+| `ResponseTimeout`      | Connected; no response within `Timeout` |
+| `ConnectionRefused`    | Nothing listening                       |
+| `ConnectionReset`      | RST before a response                   |
+
+Connection errors omit `StatusCode` and `Protocol` in the reason object.
+
+## HTTP codes you will see
+
+| Code            | Typical cause                  | Fix                                                      |
+| --------------- | ------------------------------ | -------------------------------------------------------- |
+| 200             | Healthy                        | None                                                     |
+| 301 / 302       | Redirect; probes do not follow | Point at the final path or add the code to the matcher   |
+| 401 / 403       | Auth required                  | Serve an unauthenticated liveness path                   |
+| 404             | Wrong path                     | Match a real route                                       |
+| 500             | App error                      | Logs on the instance                                     |
+| 502 / 503 / 504 | Upstream or startup            | Raise `InitializationGracePeriodSeconds` if this is boot |
+
+## Common mistakes
+
+- Application bound only to `127.0.0.1`.
+- HTTPS check against an HTTP-only listener (or the reverse).
+- `--port` set to 80/443 when the process listens on `8081` / `8443`.
+- Grace period shorter than startup, so Auto Scaling replaces healthy-but-slow
+  instances.
+- Aggregation `included` during a deploy with no suppression.
+- HTTP/2 probe against a listener that cannot speak HTTP/2.
+
+<Aside type="note">The product sends health-check requests over HTTP/2. If your server refuses HTTP/2, expect connection or protocol failures even when `curl` over HTTP/1.1 succeeds.</Aside>

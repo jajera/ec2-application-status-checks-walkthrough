@@ -1,0 +1,76 @@
+---
+title: Associate instances
+description: Associate an application status check by instance ID, custom tags, or the Auto Scaling groupName system tag.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## By instance ID
+
+```bash
+aws ec2 associate-application-status-check \
+  --application-status-check-id "$ASC_ID" \
+  --instance-ids "$INSTANCE_ID"
+```
+
+Associate and disassociate calls return per-instance success and failure. If a
+check is already associated, that instance appears in the unsuccessful list
+with a reason.
+
+## By tag
+
+Lab from [Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/):
+
+```bash
+aws ec2 associate-application-status-check \
+  --application-status-check-id "$ASC_ID" \
+  --target-tag-associations Key=asc-lab,Value=true
+```
+
+Production-style example:
+
+```bash
+aws ec2 associate-application-status-check \
+  --application-status-check-id asc-0123456789abcdef0 \
+  --target-tag-associations Key=Environment,Value=production
+```
+
+Tag associations are rules. Each rule counts as **one association** toward
+quotas, regardless of how many instances currently match.
+
+## Auto Scaling group
+
+Amazon EC2 Auto Scaling stamps every instance with
+`aws:autoscaling:groupName`. Associate once; new launches pick up the check.
+
+```bash
+aws ec2 associate-application-status-check \
+  --application-status-check-id asc-0123456789abcdef0 \
+  --target-tag-associations Key=aws:autoscaling:groupName,Value=my-asg
+```
+
+No launch template change is required.
+
+<Aside type="caution">
+  Leave aggregation `excluded` until you have verified results on a canary instance or a small tag set. Flip to `included` only after `describe-application-status` looks right for at least two
+  intervals (about two minutes).
+</Aside>
+
+## Disassociate
+
+By instance ID:
+
+```bash
+aws ec2 disassociate-application-status-check \
+  --application-status-check-id asc-0123456789abcdef0 \
+  --instance-ids i-0123456789abcdef0
+```
+
+If you associated by tag, remove the tag from the instance (or disassociate
+the tag rule). After disassociation, overall status is `not-applicable`.
+
+## Next
+
+[Verify](/deploy-and-operate/verify/) in the console and CLI before you include
+the check in aggregation. With `excluded`, the instance **Status and alarms**
+card shows Application status as **None associated or included**.

@@ -1,0 +1,44 @@
+---
+title: Quotas
+description: Account quotas for application status checks, associations, and targets, including silent overflow when you exceed targets per account.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Service quota names and defaults also appear under **Amazon EC2 endpoints and
+quotas** in the AWS General Reference. Request increases in the Service Quotas
+console.
+
+## Feature quotas
+
+A **target** is one instance monitored by one health check. If two checks
+monitor the same instance, that is two targets.
+
+An **association** is one tag rule or one instance ID attached to a check,
+regardless of how many instances the tag currently matches.
+
+| Quota                         | Default | Increase                  |
+| ----------------------------- | ------- | ------------------------- |
+| Health checks per account     | 50      | Automatic                 |
+| Associations per health check | 50      | Automatic                 |
+| Associations per account      | 200     | Automatic                 |
+| Targets per account           | 5,000   | Request (manual approval) |
+
+Most increases auto-approve. **Targets per account** requires a ticket.
+
+<Aside type="danger">
+  If target count exceeds the account quota, targets over the limit are **not monitored** and do not report application status. There is no noisy failure for the overflow set. Alarm `AWS/Usage` for
+  this quota before you associate a broad production tag.
+</Aside>
+
+## Related VPC quota
+
+Managed ENIs count against **ENIs per VPC**. If that quota is exhausted, AWS
+cannot create the health-check ENI and the check cannot run.
+
+## Suggested alarms
+
+- Service Quotas usage metrics in `AWS/Usage` for health checks, associations,
+  and targets.
+- `StatusCheckFailed_Application` on a canary instance after you flip
+  aggregation to `included`.

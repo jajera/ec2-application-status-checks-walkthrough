@@ -1,0 +1,153 @@
+---
+title: Verify
+description: Confirm status in the EC2 console and CLI, fail the health endpoint, then include the check in aggregation.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import DocsImage from "../../../components/DocsImage.astro";
+
+Wait at least **two intervals** (about two minutes) after associate, plus the initialization grace (60 seconds in this lab).
+
+## Excluded (after associate)
+
+```bash
+aws ec2 describe-application-status --instance-ids "$INSTANCE_ID"
+```
+
+A healthy detail looks like `ResponseCodeMatched` and `StatusCode` 200. With aggregation `excluded`, overall CLI status is `not-applicable`. The console only rolls **included** checks into the instance card, so **Application status** there is **None associated or included** even though the check is associated and can already be `passed`.
+
+Open the instance → **Status and alarms**.
+
+<DocsImage
+  src="images/console-status-and-alarms-excluded.png"
+  alt="EC2 instance Status and alarms: system, instance, and EBS checks passed; Application status None associated or included while the check is excluded from aggregation"
+/>
+
+Expand **Application status details** for the per-check line. `excluded` and `passed` together is expected.
+
+<DocsImage
+  src="images/console-application-status-details-excluded-passed.png"
+  alt="Application status details: check asc-4b895121 passed with ResponseCodeMatched, aggregation Excluded"
+/>
+
+## Managed ENI
+
+```bash
+aws ec2 describe-network-interfaces \
+  --filters "Name=vpc-id,Values=${VPC_ID}" \
+  --query 'NetworkInterfaces[].{Id:NetworkInterfaceId,Desc:Description,Managed:RequesterManaged,Ip:PrivateIpAddress}' \
+  --output table
+```
+
+Look for a requester-managed interface you did not create. The description filter `*application status*` is optional; it may be empty depending on how AWS labels the ENI.
+
+## Include in aggregation
+
+```bash
+aws ec2 modify-application-status-check \
+  --application-status-check-id "$ASC_ID" \
+  --aggregation included
+```
+
+Wait one interval. Overall status becomes `ok`. The **Status and alarms** card shows Application status as **Check passed** instead of **None associated or included**. `impaired` can replace Auto Scaling instances.
+
+<DocsImage
+  src="images/console-status-and-alarms-included-passed.png"
+  alt="EC2 Status checks: system, instance, EBS, and Application status all Check passed after the check is included"
+/>
+
+Details show the same check as **Included** and **passed**.
+
+<DocsImage
+  src="images/console-application-status-details-included-passed.png"
+  alt="Application status details: check asc-4b895121 passed with ResponseCodeMatched, aggregation Included"
+/>
+
+<Aside type="caution">Do not flip `included` on a production Auto Scaling group until the fail/pass cycle below looks right.</Aside>
+
+## Fail the endpoint
+
+Stop the Python server and wait two intervals (failure threshold is 2):
+
+```bash
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["pkill -f health.py || true"]'
+
+sleep 120
+aws ec2 describe-application-status --instance-ids "$INSTANCE_ID"
+```
+
+System, instance, and EBS stay passed; **Application status** fails. Details show `ConnectionRefused` (or `ConnectionReset`). Overall is `impaired`.
+
+<DocsImage
+  src="images/console-status-and-alarms-included-failed.png"
+  alt="Status checks: system, instance, and EBS passed; Application status failed with ConnectionRefused after the health process was stopped"
+/>
+
+Start it again:
+
+```bash
+aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["nohup python3 /usr/local/bin/health.py >/var/log/health.log 2>&1 &"]'
+```
+
+Wait two successes. Overall returns to `ok`; details show **passed** / `ResponseCodeMatched` again.
+
+<DocsImage
+  src="images/console-application-status-details-recovered-passed.png"
+  alt="Application status details after restarting health.py: passed, ResponseCodeMatched, aggregation Included"
+/>
+
+## Suppress (maintenance window)
+
+Instance-level. Pass a duration, or omit it to suppress until you disable. Auto Scaling does not act while overall is `suppressed`.
+
+```bash
+aws ec2 enable-application-status-check-suppression \
+  --instance-ids "$INSTANCE_ID" \
+  --duration-seconds 3600
+```
+
+Wait until `describe-application-status` shows overall `suppressed`. The instance card shows Application status **Suppressed**; the per-check line can still be **passed**.
+
+<DocsImage
+  src="images/console-status-and-alarms-suppressed.png"
+  alt="Status checks: system, instance, and EBS passed; Application status Suppressed while the per-check line remains passed"
+/>
+
+Resume early:
+
+```bash
+aws ec2 disable-application-status-check-suppression \
+  --instance-ids "$INSTANCE_ID"
+```
+
+Overall returns to `ok` on the next interval. Exclude, disassociate, and when to use each option: [Deploy and maintenance](/deploy-and-operate/maintenance/).
+
+## CloudWatch
+
+- `StatusCheckFailed_Application` — overall status for **included** checks (`0` pass, `1` fail).
+- `StatusCheckFailed_Application_<check-id>` — per-check metric.
+
+Optional alarm after the check is `included`:
+
+```bash
+aws cloudwatch put-metric-alarm \
+  --alarm-name "${NAME}-app-status" \
+  --metric-name StatusCheckFailed_Application \
+  --namespace AWS/EC2 \
+  --statistic Maximum \
+  --period 60 \
+  --threshold 1 \
+  --comparison-operator GreaterThanOrEqualToThreshold \
+  --evaluation-periods 2 \
+  --dimensions Name=InstanceId,Value="$INSTANCE_ID"
+```
+
+## Next
+
+Optional [Auto Scaling](/deploy-and-operate/auto-scaling/) replace demo, then [teardown](/deploy-and-operate/teardown/).

@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+
+# build
+dist/
+.astro/
+
+# generated at build
+public/og-image.png
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*.swo

@@ -1,0 +1,63 @@
+---
+title: Pricing
+description: Application status check billing is an hourly managed ENI charge per Availability Zone plus standard CloudWatch metric pricing.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+Figures below are from the Amazon EC2 User Guide **Application status checks**
+page (retrieved 11 August 2026). Confirm in your account before budgeting.
+
+## What you pay
+
+Application status checks bill on two components:
+
+1. **$0.01 per hour** for each **managed ENI**, per Availability Zone.
+2. **Standard Amazon CloudWatch pricing** for application status check
+   metrics.
+
+AWS creates **one managed ENI per (source subnet × source security group)**
+that has associated instances — not one ENI per instance.
+
+## Monthly ENI math
+
+$0.01/hour × 24 × 30 = **$7.20 per ENI per AZ** in a 30-day month.
+
+| Fleet shape                            | Likely ENIs                  | ENI cost / 30 days                                   |
+| -------------------------------------- | ---------------------------- | ---------------------------------------------------- |
+| 1 AZ, AWS-managed path, one source SG  | 1                            | $7.20                                                |
+| 3 AZ Auto Scaling group, one source SG | 3                            | $21.60                                               |
+| Many subnet/SG combinations            | N                            | $7.20 × N                                            |
+| Local Zone targets                     | ENI in the **parent Region** | ENI hours plus Local Zone service-link data transfer |
+
+<Aside type="tip">
+  Cost grows with **network topology**, not instance count. A 200-instance group in three AZs with one source SG is still three ENIs. Fragmented source subnets and security groups multiply the bill.
+</Aside>
+
+## Compared with other health checks
+
+| Mechanism                               | Typical cost shape                                     |
+| --------------------------------------- | ------------------------------------------------------ |
+| EC2 application status checks           | $7.20/month per managed ENI/AZ + CloudWatch            |
+| Application Load Balancer health checks | Included in ALB hours and LCU                          |
+| Route 53 health checks (AWS endpoints)  | $0.50 per check per month; first 50 AWS endpoints free |
+
+Route 53 is cheaper for a handful of public endpoints and more expensive as
+instance count grows. Application status checks stay cheap for large fleets
+**if** you keep source subnet/SG combinations small.
+
+ALB health checks are not a substitute cost comparison if you do not already
+need a load balancer. Standing up an ALB only to get HTTP probes is usually
+more expensive than three ENIs.
+
+## What is not billed here
+
+- Auto Scaling fleet management has **no extra fee**.
+- You still pay for the EC2 instances, EBS, and data transfer you already run.
+- Local Zone health-check traffic uses the Local Zone service link and may
+  incur **additional data transfer**.
+
+## Next
+
+Review [quotas](/reference/quotas/) so target
+counts do not silently drop off monitoring.

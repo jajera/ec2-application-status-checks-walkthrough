@@ -1,0 +1,201 @@
+---
+title: Create VPC and EC2
+description: Bootstrap a one-AZ VPC, SSM instance profile, and an Amazon Linux instance with a /health endpoint using only the AWS CLI.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+This page creates the VPC and instance the rest of the lab needs: one public
+subnet, one security group, Session Manager, one `t3.micro`. The check itself
+is three EC2 API calls on the next pages.
+
+Reuse an existing VPC if you already have one. Jump to
+[Create a check](/deploy-and-operate/create-check/).
+
+<Aside type="tip">
+  Keep this shell open. Later pages reuse `$VPC_ID`, `$INSTANCE_ID`, and `$ASC_ID`. Lab cost is one `t3.micro` plus about **$0.01/hour** for the managed ENI after you create the check.
+</Aside>
+
+## Shell variables
+
+```bash
+export AWS_PAGER=""
+export AWS_REGION=ap-southeast-2
+export AWS_DEFAULT_REGION="$AWS_REGION"
+export NAME=asc-lab
+
+AZ=$(aws ec2 describe-availability-zones \
+  --query 'AvailabilityZones[?State==`available`].ZoneName | [0]' \
+  --output text)
+export AZ
+echo "$AZ"
+```
+
+## VPC, subnet, internet gateway
+
+```bash
+VPC_ID=$(aws ec2 create-vpc \
+  --cidr-block 10.80.0.0/16 \
+  --tag-specifications "ResourceType=vpc,Tags=[{Key=Name,Value=${NAME}}]" \
+  --query Vpc.VpcId --output text)
+
+aws ec2 modify-vpc-attribute --vpc-id "$VPC_ID" --enable-dns-support Value=true
+aws ec2 modify-vpc-attribute --vpc-id "$VPC_ID" --enable-dns-hostnames Value=true
+
+SUBNET_ID=$(aws ec2 create-subnet \
+  --vpc-id "$VPC_ID" \
+  --cidr-block 10.80.1.0/24 \
+  --availability-zone "$AZ" \
+  --tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=${NAME}-public}]" \
+  --query Subnet.SubnetId --output text)
+
+aws ec2 modify-subnet-attribute --subnet-id "$SUBNET_ID" --map-public-ip-on-launch
+
+IGW_ID=$(aws ec2 create-internet-gateway \
+  --tag-specifications "ResourceType=internet-gateway,Tags=[{Key=Name,Value=${NAME}}]" \
+  --query InternetGateway.InternetGatewayId --output text)
+
+aws ec2 attach-internet-gateway --internet-gateway-id "$IGW_ID" --vpc-id "$VPC_ID"
+
+RTB_ID=$(aws ec2 create-route-table \
+  --vpc-id "$VPC_ID" \
+  --tag-specifications "ResourceType=route-table,Tags=[{Key=Name,Value=${NAME}-public}]" \
+  --query RouteTable.RouteTableId --output text)
+
+aws ec2 create-route --route-table-id "$RTB_ID" \
+  --destination-cidr-block 0.0.0.0/0 --gateway-id "$IGW_ID"
+
+aws ec2 associate-route-table --route-table-id "$RTB_ID" --subnet-id "$SUBNET_ID"
+```
+
+The internet gateway lets SSM agent reach public endpoints. The status check
+itself never leaves the VPC.
+
+## Security group
+
+Allow TCP 8080 from the VPC CIDR so the managed ENI can probe. Do not open 8080
+to `0.0.0.0/0`.
+
+```bash
+SG_ID=$(aws ec2 create-security-group \
+  --group-name "$NAME" \
+  --description "asc-lab app" \
+  --vpc-id "$VPC_ID" \
+  --tag-specifications "ResourceType=security-group,Tags=[{Key=Name,Value=${NAME}}]" \
+  --query GroupId --output text)
+
+aws ec2 authorize-security-group-ingress \
+  --group-id "$SG_ID" \
+  --ip-permissions IpProtocol=tcp,FromPort=8080,ToPort=8080,IpRanges='[{CidrIp=10.80.0.0/16,Description=application-status-checks}]'
+```
+
+## Session Manager role
+
+```bash
+cat > /tmp/${NAME}-trust.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Service": "ec2.amazonaws.com" },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+
+aws iam create-role \
+  --role-name "$NAME-ssm" \
+  --assume-role-policy-document "file:///tmp/${NAME}-trust.json"
+
+aws iam attach-role-policy \
+  --role-name "$NAME-ssm" \
+  --policy-arn arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+aws iam create-instance-profile --instance-profile-name "$NAME-ssm"
+aws iam add-role-to-instance-profile \
+  --instance-profile-name "$NAME-ssm" \
+  --role-name "$NAME-ssm"
+
+sleep 10
+```
+
+## User data
+
+Amazon Linux 2023 already has Python 3. Serve `/health` → `200` on port 8080
+(any HTTP/HTTPS port 1–65535 works in production; 8080 is the lab choice).
+
+```bash
+cat > /tmp/${NAME}-userdata.sh << 'EOF'
+#!/bin/bash
+cat >/usr/local/bin/health.py <<'PY'
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+class H(BaseHTTPRequestHandler):
+    def do_GET(self):
+        code = 200 if self.path.split("?", 1)[0] == "/health" else 404
+        self.send_response(code)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"ok" if code == 200 else b"no")
+
+    def log_message(self, fmt, *args):
+        return
+
+HTTPServer(("0.0.0.0", 8080), H).serve_forever()
+PY
+nohup python3 /usr/local/bin/health.py >/var/log/health.log 2>&1 &
+EOF
+```
+
+## Launch the instance
+
+```bash
+AMI_ID=$(aws ssm get-parameter \
+  --name /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64 \
+  --query Parameter.Value --output text)
+
+INSTANCE_ID=$(aws ec2 run-instances \
+  --image-id "$AMI_ID" \
+  --instance-type t3.micro \
+  --subnet-id "$SUBNET_ID" \
+  --security-group-ids "$SG_ID" \
+  --iam-instance-profile Name="$NAME-ssm" \
+  --user-data "file:///tmp/${NAME}-userdata.sh" \
+  --tag-specifications "ResourceType=instance,Tags=[{Key=Name,Value=${NAME}},{Key=asc-lab,Value=true}]" \
+  --query Instances[0].InstanceId --output text)
+
+aws ec2 wait instance-running --instance-ids "$INSTANCE_ID"
+
+for i in $(seq 1 30); do
+  STATUS=$(aws ssm describe-instance-information \
+    --filters "Key=InstanceIds,Values=${INSTANCE_ID}" \
+    --query 'InstanceInformationList[0].PingStatus' --output text)
+  [ "$STATUS" = "Online" ] && break
+  sleep 10
+done
+
+CMD_ID=$(aws ssm send-command \
+  --instance-ids "$INSTANCE_ID" \
+  --document-name AWS-RunShellScript \
+  --parameters 'commands=["curl -s -o /dev/null -w %{http_code} http://127.0.0.1:8080/health"]' \
+  --query Command.CommandId --output text)
+
+aws ssm get-command-invocation \
+  --command-id "$CMD_ID" \
+  --instance-id "$INSTANCE_ID" \
+  --query '{Status:Status,Stdout:StandardOutputContent}' --output json
+```
+
+Stdout should be `200`. If Status is `Pending` or `InProgress`, wait a few seconds and run `get-command-invocation` again.
+
+```bash
+export VPC_ID SUBNET_ID SG_ID INSTANCE_ID IGW_ID RTB_ID AMI_ID NAME AZ
+```
+
+## Next
+
+[Create a check](/deploy-and-operate/create-check/) on port 8080, path
+`/health`, aggregation excluded. Tear down with
+[Teardown](/deploy-and-operate/teardown/).

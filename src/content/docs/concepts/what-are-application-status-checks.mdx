@@ -1,0 +1,77 @@
+---
+title: What are application status checks?
+description: Opt-in HTTP/HTTPS probes that sit next to EC2 instance and system status checks and can drive Auto Scaling replacement.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Tooltip from "@/components/Tooltip.astro";
+
+## What shipped
+
+On 10 August 2026 Amazon EC2 added <Tooltip term="application-status-check" label="application status checks" />: an opt-in HTTP or HTTPS probe that reports next to the existing **system**, **instance**, and **attached EBS** checks.
+
+You define protocol, port, path, and healthy response codes. Port is any TCP port **1–65535** (`8080`, `8081`, `8443`, not only `80`/`443`). Protocol is **HTTP or HTTPS only**. You associate the check with instances by instance ID or tag. EC2 then sends a request every 60 seconds from a <Tooltip term="managed-eni" label="managed ENI" /> in your VPC and records pass or fail.
+
+If the <Tooltip term="overall-status" label="overall application status" /> is `impaired` and the check is <Tooltip term="included" label="included" /> in <Tooltip term="aggregation" label="aggregation" />, <Tooltip term="auto-scaling" label="Amazon EC2 Auto Scaling" /> replaces the instance. You do not set a new Auto Scaling health-check type.
+
+## How a probe runs
+
+1. AWS creates one managed ENI per combination of source subnet and source
+   security group that has associated instances.
+2. Health-check traffic originates from AWS-managed instances in the **same
+   Availability Zone** as the target (parent AZ for Local Zones).
+3. The request uses <Tooltip term="http-2" label="HTTP/2" />. HTTPS does **not** validate the server
+   certificate. Redirects are **not** followed.
+4. Consecutive failures (`FailureThreshold`, default 2) mark the check failed.
+   Consecutive successes (`SuccessThreshold`, default 2) mark it healthy again.
+
+<Aside type="caution">
+  New checks default to `aggregation=included`. Associate that with an Auto Scaling group and the first failed probe can replace instances before you have seen a reason code. This walkthrough creates the check as <Tooltip term="excluded" label="excluded" /> so status still reports, but Auto Scaling does not act. Flip to included after the fail and pass cycle looks right.
+</Aside>
+
+## Status values
+
+Each associated check reports `passed`, `failed`, `initializing`,
+`insufficient-data`, or `not-applicable`.
+
+Overall application status for the instance is:
+
+| Status              | Meaning                                                                      |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `ok`                | All included checks passed                                                   |
+| `impaired`          | One or more included checks failed — Auto Scaling replaces                   |
+| `initializing`      | First evaluation not finished                                                |
+| `insufficient-data` | Not enough data yet                                                          |
+| `not-applicable`    | All associated checks are excluded. Console: **None associated or included** |
+| `suppressed`        | <Tooltip term="suppression" label="You paused evaluation" /> for maintenance |
+
+Auto Scaling acts **only** on `impaired`. It ignores the other overall values.
+
+## Protocol, port, and ALB
+
+The check is an **HTTP client**, not a TCP/UDP/gRPC probe and not a process
+inspector. Anything that answers HTTP/2 `GET` on the configured port and path
+can be a target — nginx, Tomcat, a sidecar on `8081`, TLS on `8443`.
+
+| Knob      | Allowed                                       | Not allowed                         |
+| --------- | --------------------------------------------- | ----------------------------------- |
+| Protocol  | `http`, `https`                               | TCP, UDP, TLS-only, gRPC            |
+| Port      | **1–65535** (`8080`, `8081`, `8443`, `80`, …) | —                                   |
+| Path      | `GET` starting with `/` (default `/`)         | Authenticated or redirect-only apps |
+| Transport | **HTTP/2**                                    | HTTP/1.1-only listeners often fail  |
+
+You do not need an <Tooltip term="alb" label="ALB" />. The probe reaches the instance from inside the VPC.
+
+If you already have one, keep its health checks for who receives traffic. Use this check for whether the instance should still exist. Point it at the **instance** port, not the load balancer hostname. Example: the ALB listens on `443` and forwards to `:8081` on the instance — create the check with `--protocol http --port 8081`.
+
+HTTPS probes skip certificate validation. They do not follow redirects.
+
+## What it cannot see
+
+It does not inspect processes or containers. A stopped Docker daemon, a hung worker, or a dead sidecar is invisible unless that failure shows up as a bad HTTP response on the port and path you configured.
+
+## Next
+
+[Probe path](/architecture/probe-path/) shows the managed ENI and overall
+status. Then [Prerequisites](/deploy-and-operate/prerequisites/) and
+[Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/).

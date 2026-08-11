@@ -1,0 +1,24 @@
+/* Theme overrides */
+
+/* Align section group headers with top-level links like Home */
+.sidebar-pane ul.top-level > li > details > summary {
+  padding-inline-start: var(--sl-sidebar-item-padding-inline) !important;
+}
+
+/* Hide the collapse caret arrow from sidebar group headers */
+.sidebar-pane ul.top-level > li > details > summary .caret {
+  display: none !important;
+}
+
+/* Restore table cell padding (Starlight removes inset padding on first/last columns) */
+.sl-markdown-content :is(th, td):not(:where(.not-content *)) {
+  padding: 0.625rem 1rem;
+}
+
+.sl-markdown-content :is(th:first-child, td:first-child):not(:where(.not-content *)) {
+  padding-inline-start: 1rem;
+}
+
+.sl-markdown-content :is(th:last-child, td:last-child):not(:where(.not-content *)) {
+  padding-inline-end: 1rem;
+}

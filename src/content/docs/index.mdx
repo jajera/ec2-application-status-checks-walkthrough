@@ -1,0 +1,46 @@
+---
+title: EC2 Application Status Checks
+description: CLI walkthrough for Amazon EC2 application status checks — in-VPC HTTP probes, Auto Scaling replacement, pricing, and quotas.
+template: splash
+hero:
+  tagline: Learn how Amazon EC2 probes HTTP on your instances from inside the VPC — the same status view as system and instance checks, with optional Auto Scaling replacement.
+  actions:
+    - text: Get Started
+      link: /concepts/what-are-application-status-checks/
+      icon: right-arrow
+      variant: primary
+---
+
+import { Card, CardGrid } from "@astrojs/starlight/components";
+import Tooltip from "@/components/Tooltip.astro";
+
+Commands in this walkthrough are AWS CLI. You create a small VPC and an instance with a `/health` endpoint, then create the check and associate it.
+
+## Why another status check?
+
+EC2 already reports whether the hypervisor and the instance are reachable. It does not know whether the process on the box is still serving traffic.
+
+These <Tooltip term="application-status-check" label="application status checks" /> fill that gap: **HTTP or HTTPS** on **any port** (`8080`, `8081`, `8443` — not only 80/443), from a <Tooltip term="managed-eni" label="managed ENI" /> in your VPC. A load balancer is optional. If you already have an <Tooltip term="alb" label="ALB" />, the check still targets the **instance**, not the balancer.
+
+## What you'll walk through
+
+<CardGrid>
+  <Card title="Concepts" icon="open-book">
+    The fourth EC2 status check, aggregation, HTTP/2 behaviour, and what the probe cannot see.
+  </Card>
+  <Card title="Architecture" icon="puzzle">
+    Managed ENI, same-AZ traffic, overall status, and how Auto Scaling consumes `impaired`.
+  </Card>
+  <Card title="Deploy and Operate" icon="rocket">
+    VPC and EC2 with SSM, create and associate the check, verify, fail the endpoint, optional ASG replace, teardown.
+  </Card>
+  <Card title="Auto Scaling" icon="setting">
+    No extra group health-check type. Tag `aws:autoscaling:groupName` and replacements follow overall status.
+  </Card>
+  <Card title="Pricing and quotas" icon="document">
+    $0.01 per hour per managed ENI per AZ, CloudWatch metrics, and silent target overflow at 5,000.
+  </Card>
+  <Card title="Reference" icon="warning">
+    Comparison with ALB and Route 53, reason codes, and official docs.
+  </Card>
+</CardGrid>

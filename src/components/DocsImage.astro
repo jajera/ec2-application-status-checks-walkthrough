@@ -1,0 +1,163 @@
+---
+interface Props {
+  src: string;
+  alt: string;
+}
+
+const { src, alt } = Astro.props;
+const path = src.startsWith("/") ? src.slice(1) : src;
+const base = import.meta.env.BASE_URL.endsWith("/")
+  ? import.meta.env.BASE_URL
+  : `${import.meta.env.BASE_URL}/`;
+const href = `${base}${path}`;
+---
+
+<button type="button" class="docs-image" aria-label={`Enlarge image: ${alt}`}>
+  <img src={href} alt={alt} loading="lazy" decoding="async" />
+</button>
+
+<script>
+  function ensureLightbox(): HTMLDialogElement {
+    let dialog = document.getElementById("docs-image-zoom") as HTMLDialogElement | null;
+    if (dialog) return dialog;
+
+    dialog = document.createElement("dialog");
+    dialog.id = "docs-image-zoom";
+    dialog.className = "docs-image-zoom";
+    dialog.innerHTML = `
+      <button type="button" class="docs-image-zoom__close" aria-label="Close enlarged image">Close</button>
+      <img class="docs-image-zoom__img" alt="" />
+    `;
+    document.body.appendChild(dialog);
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .docs-image-zoom {
+        box-sizing: border-box;
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        max-height: 100%;
+        margin: 0;
+        padding: 1.5rem;
+        border: 0;
+        background: transparent;
+        overflow: auto;
+      }
+      .docs-image-zoom[open] {
+        display: grid;
+        place-items: center;
+      }
+      .docs-image-zoom::backdrop {
+        background: rgba(42, 31, 61, 0.88);
+      }
+      .docs-image-zoom__close {
+        position: fixed;
+        top: 0.75rem;
+        right: 0.75rem;
+        z-index: 2;
+        appearance: none;
+        border: 0;
+        border-radius: 999px;
+        padding: 0.4rem 0.85rem;
+        font: inherit;
+        cursor: pointer;
+        color: #f6efe8;
+        background: rgba(42, 31, 61, 0.92);
+      }
+      .docs-image-zoom__img {
+        display: block;
+        box-sizing: border-box;
+        width: auto;
+        height: auto;
+        max-width: min(92vw, 1600px);
+        max-height: 88vh;
+        margin: 0 auto;
+        border-radius: 0.4rem;
+        object-fit: contain;
+        image-rendering: auto;
+      }
+    `;
+    document.head.appendChild(style);
+
+    dialog
+      .querySelector(".docs-image-zoom__close")
+      ?.addEventListener("click", () => dialog?.close());
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+
+    return dialog;
+  }
+
+  function openZoom(src: string, alt: string) {
+    const dialog = ensureLightbox();
+    const img = dialog.querySelector(".docs-image-zoom__img") as HTMLImageElement | null;
+    if (!img) return;
+
+    const show = () => {
+      const maxW = Math.min(window.innerWidth * 0.92, 1600);
+      const maxH = window.innerHeight * 0.88;
+      const nw = img.naturalWidth || 1;
+      const nh = img.naturalHeight || 1;
+      const scale = Math.min(maxW / nw, maxH / nh, 1);
+      img.style.width = `${Math.round(nw * scale)}px`;
+      img.style.height = "auto";
+      if (typeof dialog.showModal === "function") {
+        if (!dialog.open) dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+    };
+
+    img.alt = alt || "";
+    if (img.src === src && img.complete) {
+      show();
+      return;
+    }
+    img.onload = () => show();
+    img.onerror = () => show();
+    img.src = src;
+    if (img.complete) show();
+  }
+
+  function bind() {
+    document.querySelectorAll<HTMLButtonElement>(".docs-image").forEach((btn) => {
+      if (btn.dataset.zoomBound) return;
+      btn.dataset.zoomBound = "1";
+      btn.addEventListener("click", () => {
+        const img = btn.querySelector("img");
+        if (!img) return;
+        openZoom(img.currentSrc || img.src, img.alt || "");
+      });
+    });
+  }
+
+  bind();
+  document.addEventListener("astro:page-load", bind);
+</script>
+
+<style>
+  .docs-image {
+    display: block;
+    width: 100%;
+    margin-block: 1rem;
+    margin-inline: auto;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+  }
+
+  .docs-image img {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--sl-color-hairline);
+  }
+</style>

@@ -1,0 +1,146 @@
+---
+title: Auto Scaling
+description: How Amazon EC2 Auto Scaling uses aggregated application status to replace impaired instances with no extra group setting.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Tooltip from "@/components/Tooltip.astro";
+import DocsImage from "../../../components/DocsImage.astro";
+
+## No extra group configuration
+
+Create the check in EC2, associate it with `aws:autoscaling:groupName`, and keep aggregation <Tooltip term="included" label="included" />. <Tooltip term="auto-scaling" label="Auto Scaling" /> terminates instances whose <Tooltip term="overall-status" label="overall application status" /> is `impaired` and launches replacements to desired capacity.
+
+It does **not** act on individual check status. Excluded or suppressed checks
+do not drive replacements.
+
+## Two grace periods
+
+| Knob                                                                                    | Where                    | Role                                                                 |
+| --------------------------------------------------------------------------------------- | ------------------------ | -------------------------------------------------------------------- |
+| <Tooltip term="initialization-grace-period" label="InitializationGracePeriodSeconds" /> | Application status check | Wait after launch before this probe evaluates (default 300, max 600) |
+| Health check grace period                                                               | Auto Scaling group       | Wait before the **group** treats the instance as unhealthy           |
+
+If either window is shorter than app startup, new instances get replaced in a
+loop. Increase both for slow JVM, container, or migration boots.
+
+<Aside type="caution">
+  Reboots fail application status checks until the process answers again. A rolling reboot without
+  <Tooltip term="suppression" label="suppression" /> or a long enough grace period looks like an impaired fleet.
+</Aside>
+
+## ELB health checks still matter
+
+If the group already uses Elastic Load Balancing health checks, keep them.
+
+- <Tooltip term="alb" label="ALB" /> and NLB decide who receives traffic and can probe as often as every 5 seconds.
+- **Application status checks** decide whether the instance should still exist,
+  including for groups **without** a load balancer.
+
+Running both is complementary. Replacing ALB health checks on a public web
+tier is not. If ALB `:443` forwards to instance `:8081`, the application status
+check uses `--port 8081` (the instance), not 443 (the ALB).
+
+## Custom health checks
+
+You can still call `SetInstanceHealth` for conditions this feature cannot see
+(TCP-only listeners, queue depth, sidecar agents). Application status checks
+do not replace that API.
+
+## Optional lab: watch a replacement
+
+Requires [Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/), a check with
+aggregation **`included`**, and the instance's user data / IAM profile.
+
+```bash
+aws ec2 create-launch-template \
+  --launch-template-name "$NAME" \
+  --launch-template-data "{
+    \"ImageId\": \"${AMI_ID}\",
+    \"InstanceType\": \"t3.micro\",
+    \"IamInstanceProfile\": {\"Name\": \"${NAME}-ssm\"},
+    \"NetworkInterfaces\": [{
+      \"DeviceIndex\": 0,
+      \"SubnetId\": \"${SUBNET_ID}\",
+      \"Groups\": [\"${SG_ID}\"],
+      \"AssociatePublicIpAddress\": true
+    }],
+    \"UserData\": \"$(base64 -w0 /tmp/${NAME}-userdata.sh)\"
+  }"
+
+aws autoscaling create-auto-scaling-group \
+  --auto-scaling-group-name "$NAME" \
+  --launch-template LaunchTemplateName="$NAME",Version='$Latest' \
+  --min-size 1 --max-size 1 --desired-capacity 1 \
+  --vpc-zone-identifier "$SUBNET_ID" \
+  --health-check-grace-period 90 \
+  --tags "Key=asc-lab,Value=true,PropagateAtLaunch=true"
+
+aws ec2 associate-application-status-check \
+  --application-status-check-id "$ASC_ID" \
+  --target-tag-associations Key=aws:autoscaling:groupName,Value="$NAME"
+
+aws ec2 modify-application-status-check \
+  --application-status-check-id "$ASC_ID" \
+  --aggregation included
+```
+
+Wait until the ASG instance is **InService**, SSM is online, and overall application status is `ok`. Status and alarms shows Application status **Check passed** with aggregation **Included** (the group tag picked up the check; no extra Auto Scaling health-check type).
+
+<DocsImage
+  src="images/console-status-and-alarms-asg-passed.png"
+  alt="ASG instance Status checks: system, instance, EBS, and Application status passed; details Included and ResponseCodeMatched"
+/>
+
+Terminate the original standalone instance if it is not in the group. Then stop
+`/health` on the ASG instance (SSM `pkill` as on
+[Verify](/deploy-and-operate/verify/)). Application status fails with
+`ConnectionRefused`. Auto Scaling then terminates that instance and launches a
+replacement — the console can show **Check failed** on Application status while
+system/instance already say **Shutting-down**.
+
+<DocsImage
+  src="images/console-status-and-alarms-asg-failed-replacing.png"
+  alt="ASG instance shutting down: system and instance Shutting-down, Application status Check failed"
+/>
+
+<DocsImage
+  src="images/console-application-status-details-asg-failed.png"
+  alt="Application status details: failed with ConnectionRefused, aggregation Included, while Auto Scaling replaces the instance"
+/>
+
+Watch the replace:
+
+```bash
+aws autoscaling describe-scaling-activities \
+  --auto-scaling-group-name "$NAME" \
+  --max-records 5
+```
+
+You should see a terminate of the impaired instance and a launch of a new one. No extra Auto Scaling `HealthCheckType` is required.
+
+The replacement starts in **Initializing** (system, instance, and application) until init grace and the first successes finish. That is expected, not a failed replace.
+
+<DocsImage
+  src="images/console-status-and-alarms-asg-replacement-initializing.png"
+  alt="Replacement ASG instance Status checks: system, instance, and Application status Initializing"
+/>
+
+<DocsImage
+  src="images/console-application-status-details-asg-replacement-initializing.png"
+  alt="Application status details on the replacement instance: Initializing, aggregation Included"
+/>
+
+After two successes, Application status is **Check passed** again on the new instance.
+
+<DocsImage
+  src="images/console-status-and-alarms-asg-replacement-passed.png"
+  alt="Replacement ASG instance Status checks: system, instance, EBS, and Application status Check passed"
+/>
+
+<DocsImage
+  src="images/console-application-status-details-asg-replacement-passed.png"
+  alt="Application status details on the replacement instance: passed, ResponseCodeMatched, aggregation Included"
+/>
+
+Delete the group and launch template in [Teardown](/deploy-and-operate/teardown/).
