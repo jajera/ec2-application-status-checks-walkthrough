@@ -25,10 +25,7 @@ Open the instance → **Status and alarms**.
 
 Expand **Application status details** for the per-check line. `excluded` and `passed` together is expected.
 
-<DocsImage
-  src="images/console-application-status-details-excluded-passed.png"
-  alt="Application status details: check asc-4b895121 passed with ResponseCodeMatched, aggregation Excluded"
-/>
+<DocsImage src="images/console-application-status-details-excluded-passed.png" alt="Application status details: check asc-4b895121 passed with ResponseCodeMatched, aggregation Excluded" />
 
 ## Managed ENI
 
@@ -51,17 +48,11 @@ aws ec2 modify-application-status-check \
 
 Wait one interval. Overall status becomes `ok`. The **Status and alarms** card shows Application status as **Check passed** instead of **None associated or included**. `impaired` can replace Auto Scaling instances.
 
-<DocsImage
-  src="images/console-status-and-alarms-included-passed.png"
-  alt="EC2 Status checks: system, instance, EBS, and Application status all Check passed after the check is included"
-/>
+<DocsImage src="images/console-status-and-alarms-included-passed.png" alt="EC2 Status checks: system, instance, EBS, and Application status all Check passed after the check is included" />
 
 Details show the same check as **Included** and **passed**.
 
-<DocsImage
-  src="images/console-application-status-details-included-passed.png"
-  alt="Application status details: check asc-4b895121 passed with ResponseCodeMatched, aggregation Included"
-/>
+<DocsImage src="images/console-application-status-details-included-passed.png" alt="Application status details: check asc-4b895121 passed with ResponseCodeMatched, aggregation Included" />
 
 <Aside type="caution">Do not flip `included` on a production Auto Scaling group until the fail/pass cycle below looks right.</Aside>
 
@@ -97,10 +88,7 @@ aws ssm send-command \
 
 Wait two successes. Overall returns to `ok`; details show **passed** / `ResponseCodeMatched` again.
 
-<DocsImage
-  src="images/console-application-status-details-recovered-passed.png"
-  alt="Application status details after restarting health.py: passed, ResponseCodeMatched, aggregation Included"
-/>
+<DocsImage src="images/console-application-status-details-recovered-passed.png" alt="Application status details after restarting health.py: passed, ResponseCodeMatched, aggregation Included" />
 
 ## Suppress (maintenance window)
 
@@ -114,10 +102,7 @@ aws ec2 enable-application-status-check-suppression \
 
 Wait until `describe-application-status` shows overall `suppressed`. The instance card shows Application status **Suppressed**; the per-check line can still be **passed**.
 
-<DocsImage
-  src="images/console-status-and-alarms-suppressed.png"
-  alt="Status checks: system, instance, and EBS passed; Application status Suppressed while the per-check line remains passed"
-/>
+<DocsImage src="images/console-status-and-alarms-suppressed.png" alt="Status checks: system, instance, and EBS passed; Application status Suppressed while the per-check line remains passed" />
 
 Resume early:
 

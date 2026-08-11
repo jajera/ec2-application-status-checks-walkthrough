@@ -14,10 +14,10 @@
     "test": "vitest --run"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.40.0",
-    "astro": "^6.4.6",
-    "sharp": "^0.34.0",
-    "starlight-base-path": "^0.1.1",
+    "@astrojs/starlight": "^0.41.7",
+    "astro": "^7.2.0",
+    "sharp": "^0.35.3",
+    "starlight-base-path": "^0.2.1",
     "starlight-theme-vintage": "^0.1.0"
   },
   "devDependencies": {
