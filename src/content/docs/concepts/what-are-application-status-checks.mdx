@@ -26,7 +26,8 @@ If the <Tooltip term="overall-status" label="overall application status" /> is `
    Consecutive successes (`SuccessThreshold`, default 2) mark it healthy again.
 
 <Aside type="caution">
-  New checks default to `aggregation=included`. Associate that with an Auto Scaling group and the first failed probe can replace instances before you have seen a reason code. This walkthrough creates the check as <Tooltip term="excluded" label="excluded" /> so status still reports, but Auto Scaling does not act. Flip to included after the fail and pass cycle looks right.
+  New checks default to `aggregation=included`. Associate that with an Auto Scaling group and the first failed probe can replace instances before you have seen a reason code. This walkthrough creates
+  the check as <Tooltip term="excluded" label="excluded" /> so status still reports, but Auto Scaling does not act. Flip to included after the fail and pass cycle looks right.
 </Aside>
 
 ## Status values

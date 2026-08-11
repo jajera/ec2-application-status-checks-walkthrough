@@ -62,7 +62,8 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/health
 ```
 
 <Aside type="tip">
-  Prefer a dedicated liveness path that fails closed when the process cannot serve traffic. Do not point the check at a page that redirects (`301`/`302`) unless you add those codes to the matcher — probes do not follow redirects.
+  Prefer a dedicated liveness path that fails closed when the process cannot serve traffic. Do not point the check at a page that redirects (`301`/`302`) unless you add those codes to the matcher —
+  probes do not follow redirects.
 </Aside>
 
 ## Network
