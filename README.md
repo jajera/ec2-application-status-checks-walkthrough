@@ -2,10 +2,6 @@
 
 [![Deploy to GitHub Pages](https://github.com/jajera/ec2-application-status-checks-walkthrough/actions/workflows/deploy.yml/badge.svg)](https://github.com/jajera/ec2-application-status-checks-walkthrough/actions/workflows/deploy.yml)
 
-Astro Starlight site (same layout as the S3 Annotations walkthrough) for Amazon
-EC2 application status checks: CLI lab, in-VPC HTTP probes, Auto Scaling
-replacement, pricing, and quotas.
-
 ## Deployed site
 
 **https://jajera.github.io/ec2-application-status-checks-walkthrough/**
