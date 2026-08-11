@@ -1,0 +1,109 @@
+---
+title: Create a check
+description: Create an EC2 application status check with AWS-managed or customer-managed network paths, starting with aggregation excluded.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Tooltip from "@/components/Tooltip.astro";
+
+## Recommended first create
+
+If you followed [Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/), the lab instance listens on **8080** `/health`. Create the check <Tooltip term="excluded" label="excluded" /> from <Tooltip term="aggregation" label="aggregation" /> so it reports status without driving Auto Scaling. Use a short <Tooltip term="initialization-grace-period" label="init grace" /> so the lab is not stuck for five minutes.
+
+```bash
+ASC_ID=$(aws ec2 create-application-status-check \
+  --protocol http \
+  --port 8080 \
+  --path "/health" \
+  --status-code-matcher "200" \
+  --aggregation excluded \
+  --initialization-grace-period-seconds 60 \
+  --query ApplicationStatusCheck.ApplicationStatusCheckId \
+  --output text)
+export ASC_ID
+echo "$ASC_ID"
+```
+
+`--port` is **1–65535**, not limited to 80 or 443. Match the process on the
+instance (`8081`, `8443`, …). Protocol is only `http` or `https`. TCP, UDP, and
+gRPC are not supported. With an <Tooltip term="alb" label="ALB" />, use the
+**instance** port, not the ALB listener.
+
+HTTPS on a custom port (certificate is **not** validated):
+
+```bash
+aws ec2 create-application-status-check \
+  --protocol https \
+  --port 8443 \
+  --path "/health" \
+  --status-code-matcher "200" \
+  --aggregation excluded
+```
+
+Note the `ApplicationStatusCheckId` (`asc-...`) in the response.
+
+<Aside type="note">
+  Omitting `--health-check-paths` selects <Tooltip term="aws-managed-path" label="AWS-managed network paths" />. AWS chooses source and destination subnets and security groups.
+</Aside>
+
+## Customer-managed network paths
+
+Use <Tooltip term="customer-managed-path" label="customer-managed paths" /> when
+VPC segmentation, NACLs, or compliance require a specific source subnet and
+security group for the health-check ENI.
+
+```bash
+aws ec2 create-application-status-check \
+  --protocol https \
+  --port 8443 \
+  --path "/health" \
+  --status-code-matcher "200" \
+  --aggregation excluded \
+  --health-check-paths '[
+    {
+      "Source": {
+        "SubnetId": "subnet-11111111111111111",
+        "SecurityGroupId": "sg-aaaaaaaaaaaaaaaaa"
+      },
+      "Destinations": [
+        {
+          "SubnetId": "subnet-22222222222222222",
+          "SecurityGroupId": "sg-bbbbbbbbbbbbbbbbb"
+        }
+      ]
+    }
+  ]'
+```
+
+Allow inbound on the destination group from `sg-aaaaaaaaaaaaaaaaa` on the
+**same port** as `--port` (here `8443`).
+
+## Useful optional knobs
+
+| Parameter                          | Default   | Notes                                       |
+| ---------------------------------- | --------- | ------------------------------------------- |
+| `Protocol`                         | required  | `http` or `https` only                      |
+| `Port`                             | required  | **1–65535** (any app port, not only 80/443) |
+| `Timeout`                          | 6 seconds | Range 1–30; must be less than the interval  |
+| `FailureThreshold`                 | 2         | Consecutive failures before `failed`        |
+| `SuccessThreshold`                 | 2         | Consecutive successes before `passed`       |
+| `InitializationGracePeriodSeconds` | 300       | 1–600; too short causes ASG thrash          |
+| `IpVersion`                        | `ipv4`    | Dual-stack needs a second check for IPv6    |
+| `DeviceIndex`                      | 0         | Change if the app is not on the primary ENI |
+
+The user guide documents the **interval as 60 seconds and not configurable**,
+even though the API exposes `Interval`. Treat 60 seconds as the SLA.
+
+Inspect definitions and the managed source security group:
+
+```bash
+aws ec2 describe-application-status-checks \
+  --application-status-check-ids "$ASC_ID"
+```
+
+Optional: tighten ingress to that source SG instead of the whole VPC CIDR.
+
+## Next
+
+[Associate](/deploy-and-operate/associate/)
+the check with instance IDs or tags. Probes do not run until you associate.

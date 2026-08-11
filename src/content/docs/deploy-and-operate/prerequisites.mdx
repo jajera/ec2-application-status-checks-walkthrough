@@ -1,0 +1,110 @@
+---
+title: Prerequisites
+description: AWS CLI, application endpoint, network, and IAM requirements before you create an application status check.
+---
+
+import { Aside, Tabs, TabItem } from "@astrojs/starlight/components";
+
+## AWS CLI and Region
+
+You need AWS CLI **2.36.16** or later. That is the first v2 release with `create-application-status-check`. CLI v1 never includes these commands.
+
+<Tabs syncKey="os">
+  <TabItem label="macOS">
+
+```bash
+brew install awscli
+# already installed: brew upgrade awscli
+```
+
+  </TabItem>
+  <TabItem label="Linux">
+
+Install `unzip` and `curl` first if needed (`sudo apt install -y unzip curl` or `sudo dnf install -y unzip curl`).
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install --update
+```
+
+ARM:
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install --update
+```
+
+  </TabItem>
+</Tabs>
+
+```bash
+aws --version
+aws sts get-caller-identity
+aws ec2 create-application-status-check help
+```
+
+`aws --version` must show `aws-cli/2.36.16` or newer. If `help` says the command is invalid, the CLI is too old.
+
+Application status checks are available in **all commercial Regions** and **AWS GovCloud (US)**. Credentials must be able to call EC2 in the Region where the instances run. The lab uses `ap-southeast-2`.
+
+## Application endpoint
+
+The listener must be **HTTP or HTTPS** (HTTP/2). Any port **1–65535** is valid — this lab uses `8080`; production often uses `8081`, `8443`, `3000`, not only `80`/`443`. TCP, UDP, and gRPC are out of scope.
+
+Bind on the instance network interface, not only `127.0.0.1`. Configure a path that returns a status code you will put in the matcher (default `200`). Keep it **unauthenticated**. `401` and `403` fail the check.
+
+From the instance:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/health
+```
+
+<Aside type="tip">
+  Prefer a dedicated liveness path that fails closed when the process cannot serve traffic. Do not point the check at a page that redirects (`301`/`302`) unless you add those codes to the matcher — probes do not follow redirects.
+</Aside>
+
+## Network
+
+- Instances live in a VPC.
+- The destination security group must allow inbound traffic on the check port from the **source** security group used by the check.
+- With **AWS-managed network paths**, AWS provides the source security group when you create the check.
+- With **customer-managed network paths**, you pass source and destination subnet plus security group in `--health-check-paths`.
+- Host firewalls (`iptables`, Windows Firewall) must allow the same port.
+
+Managed ENIs count against the **ENIs per VPC** quota, not the per-instance ENI limit.
+
+## IAM
+
+Your principal needs the EC2 APIs for this feature, including:
+
+- `ec2:CreateApplicationStatusCheck`
+- `ec2:ModifyApplicationStatusCheck`
+- `ec2:DeleteApplicationStatusCheck`
+- `ec2:DescribeApplicationStatusChecks`
+- `ec2:AssociateApplicationStatusCheck`
+- `ec2:DisassociateApplicationStatusCheck`
+- `ec2:DescribeApplicationStatus`
+- `ec2:EnableApplicationStatusCheckSuppression`
+- `ec2:DisableApplicationStatusCheckSuppression`
+
+AWS creates managed ENIs through a **service-linked role** using `EC2ApplicationStatusChecksServiceRolePolicy`. You do not attach that policy to your user.
+
+## Lab VPC and instance
+
+If you do not already have a VPC and an instance that meets the endpoint and network rules above, create them with the AWS CLI on [Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/).
+
+That page also needs VPC and instance APIs (`ec2:CreateVpc`, `ec2:RunInstances`, …), `ssm:GetParameter` for the AMI, and IAM to create an instance profile for Session Manager.
+
+## Auto Scaling (optional)
+
+To have replacements happen automatically:
+
+- An Auto Scaling group with at least one instance.
+- Associate the check using the `aws:autoscaling:groupName` tag.
+- Set `InitializationGracePeriodSeconds` (default 300, max 600) long enough for the app to listen, and keep the **group** health-check grace period in the same ballpark.
+
+## Next
+
+[Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/) unless you already have a target instance, then create the check with aggregation excluded.

@@ -1,0 +1,45 @@
+---
+title: Comparison
+description: When to use EC2 application status checks versus ALB, Route 53, and Auto Scaling custom health checks.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+
+## Side by side
+
+| Dimension             | EC2 application                  | ALB / NLB target                    | Route 53                 | ASG custom             |
+| --------------------- | -------------------------------- | ----------------------------------- | ------------------------ | ---------------------- |
+| Layer                 | HTTP from in-VPC ENI             | HTTP or TCP from LB nodes           | HTTP/TCP from internet   | Whatever you implement |
+| Interval              | 60s (fixed)                      | 5s–300s (ALB)                       | 10s or 30s               | Your poller            |
+| Action                | Status + ASG replace if included | Deregister; optional ASG ELB health | DNS failover             | `SetInstanceHealth`    |
+| Needs a load balancer | No                               | Yes                                 | No                       | No                     |
+| Protocols             | HTTP, HTTPS only                 | HTTP(S), TCP, gRPC, and more        | HTTP(S), TCP, calculated | Anything               |
+| Port                  | **1–65535** (e.g. 8081, 8443)    | Target-group port                   | Health-check port        | Yours                  |
+| TLS certificate check | No                               | ALB can terminate TLS               | Optional features        | Yours                  |
+
+<Aside type="note">Application status checks and ALB health checks are **complementary**. ALB decides who gets traffic. Application status checks decide whether the instance should exist.</Aside>
+
+## Use application status checks when
+
+- The Auto Scaling group has **no** load balancer (workers, batch, queue
+  consumers) and a dead process still passes instance/system checks. The check
+  works **by itself**; ALB is optional.
+- You want instance-level status in the EC2 console next to the other checks.
+- You want tag-driven association that follows new launches.
+
+## Use something else when
+
+- You need TCP, gRPC, or UDP — use NLB/ALB target-group health. This check is
+  HTTP/HTTPS only (any app port, including `8081` / `8443`).
+- You need 5–15 second detection — use ALB.
+- You need public DNS failover — use Route 53.
+- You need the probe to validate TLS certificates — use ALB or your own
+  checker. EC2 HTTPS probes skip certificate validation.
+- The workload has no HTTP listener — use custom `SetInstanceHealth` or a
+  CloudWatch agent metric.
+
+## Adoption posture
+
+Create with `aggregation=excluded`, canary a tag, confirm reason codes, then
+`included`. Keep ALB health checks for traffic steering. Wire deploy-hook
+suppression before the first production rollout.

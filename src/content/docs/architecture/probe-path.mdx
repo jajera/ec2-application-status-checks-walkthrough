@@ -1,0 +1,60 @@
+---
+title: Probe path
+description: How application status checks reach an instance from a managed ENI in the same VPC and how Auto Scaling consumes overall status.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Tooltip from "@/components/Tooltip.astro";
+
+```text
+AWS (same AZ)
+    └── managed ENI in your VPC
+            └── HTTP/2 GET  :<port>/path   (any 1–65535, e.g. 8080 or 8443)
+                    └── instance ENI (device index 0)
+                            └── app returns 200  →  passed
+                            └── timeout / 5xx    →  failed
+
+Instance overall status (included checks only)
+    ok | impaired | initializing | insufficient-data | not-applicable | suppressed
+            │
+            └── impaired + aggregation=included
+                    └── Auto Scaling terminate + launch
+```
+
+## Network
+
+Health-check traffic originates from AWS-managed instances in the **same
+Availability Zone** as the target (parent AZ for Local Zones). It stays on the
+AWS internal network. It does not traverse the public internet.
+
+AWS creates **one <Tooltip term="managed-eni" label="managed ENI" /> per (source subnet × source security group)** that has associated instances. That ENI does not count against per-instance ENI limits; it does count against **ENIs per VPC**.
+
+<Aside type="note">
+  Protocol is **HTTP or HTTPS only**. Port is **1–65535** — not limited to 80/443. HTTPS probes do **not** validate the server certificate. Redirects are not followed. Requests use{" "}
+  <Tooltip term="http-2" label="HTTP/2" />.
+</Aside>
+
+## AWS-managed vs customer-managed paths
+
+| Mode                                                                                            | Who picks source subnet and SG |
+| ----------------------------------------------------------------------------------------------- | ------------------------------ |
+| <Tooltip term="aws-managed-path" label="AWS-managed" /> (omit `--health-check-paths`)           | AWS                            |
+| <Tooltip term="customer-managed-path" label="Customer-managed" /> (pass `--health-check-paths`) | You                            |
+
+Use customer-managed paths when NACLs, inspection, or segmentation restrict who
+may reach the app port.
+
+## Aggregation
+
+| Setting                                                | Individual status | Overall status | Auto Scaling           |
+| ------------------------------------------------------ | ----------------- | -------------- | ---------------------- |
+| <Tooltip term="included" label="included" /> (default) | Yes               | Contributes    | Replaces on `impaired` |
+| <Tooltip term="excluded" label="excluded" />           | Yes               | Ignored        | No                     |
+
+This walkthrough creates checks as **`excluded`**, verifies, then flips to
+`included` only if you want replacements.
+
+## Next
+
+[Prerequisites](/deploy-and-operate/prerequisites/), then
+[Create VPC and EC2](/deploy-and-operate/vpc-and-ec2/).

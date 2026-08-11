@@ -1,0 +1,57 @@
+---
+title: Deploy and maintenance
+description: Suppress, exclude, or disassociate application status checks so deploys and in-place patches do not trigger Auto Scaling replacements.
+---
+
+import { Aside } from "@astrojs/starlight/components";
+import Tooltip from "@/components/Tooltip.astro";
+import DocsImage from "../../../components/DocsImage.astro";
+
+In-place patching, deploys, and reboots stop the application from answering.
+If aggregation is `included`, Auto Scaling may replace the instance even though
+the outage is expected. Use <Tooltip term="suppression" label="suppression" /> for a bounded window. The [Verify](/deploy-and-operate/verify/) lab runs enable and disable in order, with the console result after each command.
+
+## Option A: Suppress (bounded windows)
+
+Instance-level. Pass a duration, or omit it to suppress until you disable.
+
+```bash
+aws ec2 enable-application-status-check-suppression \
+  --instance-ids "$INSTANCE_ID" \
+  --duration-seconds 3600
+```
+
+Overall status reports `suppressed`. Auto Scaling does not act. The instance card shows Application status **Suppressed**; the per-check line can still be **passed**.
+
+<DocsImage
+  src="images/console-status-and-alarms-suppressed.png"
+  alt="Status checks: system, instance, and EBS passed; Application status Suppressed while the per-check line remains passed"
+/>
+
+Resume early:
+
+```bash
+aws ec2 disable-application-status-check-suppression \
+  --instance-ids "$INSTANCE_ID"
+```
+
+<Aside type="tip">
+  Deploy tools with pre/post hooks: enable suppression in the pre-hook with a duration that covers the window, deploy, then disable in the post-hook. If the tool has no hooks, drive this from the
+  pipeline that invokes it.
+</Aside>
+
+## Option B: Exclude from aggregation
+
+Keep evaluating and reporting individual status, but do not affect overall
+status or Auto Scaling. Use this for a long validation of a new check version.
+
+```bash
+aws ec2 modify-application-status-check \
+  --application-status-check-id "$ASC_ID" \
+  --aggregation excluded
+```
+
+## Option C: Disassociate
+
+For indefinite removal from a subset of instances, disassociate or drop the
+matching tag. Overall status becomes `not-applicable`.
