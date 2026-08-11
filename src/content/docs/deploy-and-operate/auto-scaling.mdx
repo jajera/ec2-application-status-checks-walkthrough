@@ -87,10 +87,7 @@ aws ec2 modify-application-status-check \
 
 Wait until the ASG instance is **InService**, SSM is online, and overall application status is `ok`. Status and alarms shows Application status **Check passed** with aggregation **Included** (the group tag picked up the check; no extra Auto Scaling health-check type).
 
-<DocsImage
-  src="images/console-status-and-alarms-asg-passed.png"
-  alt="ASG instance Status checks: system, instance, EBS, and Application status passed; details Included and ResponseCodeMatched"
-/>
+<DocsImage src="images/console-status-and-alarms-asg-passed.png" alt="ASG instance Status checks: system, instance, EBS, and Application status passed; details Included and ResponseCodeMatched" />
 
 Terminate the original standalone instance if it is not in the group. Then stop
 `/health` on the ASG instance (SSM `pkill` as on
@@ -99,10 +96,7 @@ Terminate the original standalone instance if it is not in the group. Then stop
 replacement — the console can show **Check failed** on Application status while
 system/instance already say **Shutting-down**.
 
-<DocsImage
-  src="images/console-status-and-alarms-asg-failed-replacing.png"
-  alt="ASG instance shutting down: system and instance Shutting-down, Application status Check failed"
-/>
+<DocsImage src="images/console-status-and-alarms-asg-failed-replacing.png" alt="ASG instance shutting down: system and instance Shutting-down, Application status Check failed" />
 
 <DocsImage
   src="images/console-application-status-details-asg-failed.png"
@@ -121,26 +115,14 @@ You should see a terminate of the impaired instance and a launch of a new one. N
 
 The replacement starts in **Initializing** (system, instance, and application) until init grace and the first successes finish. That is expected, not a failed replace.
 
-<DocsImage
-  src="images/console-status-and-alarms-asg-replacement-initializing.png"
-  alt="Replacement ASG instance Status checks: system, instance, and Application status Initializing"
-/>
+<DocsImage src="images/console-status-and-alarms-asg-replacement-initializing.png" alt="Replacement ASG instance Status checks: system, instance, and Application status Initializing" />
 
-<DocsImage
-  src="images/console-application-status-details-asg-replacement-initializing.png"
-  alt="Application status details on the replacement instance: Initializing, aggregation Included"
-/>
+<DocsImage src="images/console-application-status-details-asg-replacement-initializing.png" alt="Application status details on the replacement instance: Initializing, aggregation Included" />
 
 After two successes, Application status is **Check passed** again on the new instance.
 
-<DocsImage
-  src="images/console-status-and-alarms-asg-replacement-passed.png"
-  alt="Replacement ASG instance Status checks: system, instance, EBS, and Application status Check passed"
-/>
+<DocsImage src="images/console-status-and-alarms-asg-replacement-passed.png" alt="Replacement ASG instance Status checks: system, instance, EBS, and Application status Check passed" />
 
-<DocsImage
-  src="images/console-application-status-details-asg-replacement-passed.png"
-  alt="Application status details on the replacement instance: passed, ResponseCodeMatched, aggregation Included"
-/>
+<DocsImage src="images/console-application-status-details-asg-replacement-passed.png" alt="Application status details on the replacement instance: passed, ResponseCodeMatched, aggregation Included" />
 
 Delete the group and launch template in [Teardown](/deploy-and-operate/teardown/).
