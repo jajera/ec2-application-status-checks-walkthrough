@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.7",
-    "astro": "^7.2.2",
+    "astro": "^7.2.4",
     "sharp": "^0.35.3",
     "starlight-base-path": "^0.2.1",
     "starlight-theme-vintage": "^0.1.0"
