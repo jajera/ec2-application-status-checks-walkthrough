@@ -4,7 +4,7 @@
 
 ## Deployed site
 
-**https://jajera.github.io/ec2-application-status-checks-walkthrough/**
+**https://ec2-application-status-checks-walkthrough.johna.kiwi/**
 
 ## Local development
 
