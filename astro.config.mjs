@@ -4,8 +4,8 @@ import starlightThemeVintage from "starlight-theme-vintage";
 import { starlightBasePath } from "starlight-base-path";
 
 export default defineConfig({
-  site: "https://jajera.github.io",
-  base: "/ec2-application-status-checks-walkthrough/",
+  site: "https://ec2-application-status-checks-walkthrough.johna.kiwi",
+  base: "/",
   integrations: [
     starlight({
       title: "EC2 Application Status Checks",

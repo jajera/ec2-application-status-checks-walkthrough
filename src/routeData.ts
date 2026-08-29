@@ -1,6 +1,6 @@
 import { defineRouteMiddleware } from "@astrojs/starlight/route-data";
 
-const OG_IMAGE_PATH = "/ec2-application-status-checks-walkthrough/og-image.png";
+const OG_IMAGE_PATH = "/og-image.png";
 const OG_IMAGE_ALT =
   "EC2 Application Status Checks walkthrough — in-VPC HTTP probes and Auto Scaling replacement";
 
