@@ -1,15 +1,14 @@
 ---
-import { glossary } from "@/data/glossary";
+import { glossary, resolveGlossaryEntry } from "@/data/glossary";
 
 interface Props {
   term: string;
-  /** Optional display label. When not set, the term key is shown in uppercase. */
   label?: string;
 }
 
 const { term, label } = Astro.props;
 const key = term.toLowerCase();
-const definition = glossary[key];
+const { definition, url, urlLabel } = resolveGlossaryEntry(glossary[key]);
 const popoverId = `tooltip-${key}-${Math.random().toString(36).slice(2, 7)}`;
 const displayText = label ?? term.toUpperCase();
 ---
@@ -29,6 +28,14 @@ const displayText = label ?? term.toUpperCase();
         <strong>{displayText}</strong>
         <br />
         {definition}
+        {url && (
+          <>
+            <br />
+            <a class="sl-tooltip-link" href={url} target="_blank" rel="noopener noreferrer">
+              {urlLabel}
+            </a>
+          </>
+        )}
       </span>
     </span>
   ) : (
@@ -38,19 +45,17 @@ const displayText = label ?? term.toUpperCase();
 
 <style>
   .sl-tooltip-wrap {
-    display: inline !important;
+    display: inline;
     position: relative;
-    white-space: normal;
   }
 
   .sl-tooltip-trigger {
     all: unset;
-    display: inline !important;
     border-bottom: 1px dashed var(--sl-color-accent);
     color: inherit;
     cursor: help;
     font: inherit;
-    white-space: normal;
+    display: inline;
   }
 
   .sl-tooltip-trigger:focus-visible {
@@ -59,14 +64,21 @@ const displayText = label ?? term.toUpperCase();
     border-radius: 2px;
   }
 
+  .sl-tooltip-link {
+    color: var(--sl-color-accent);
+    font-size: var(--sl-text-xs);
+    text-decoration: none;
+  }
+
+  .sl-tooltip-link:hover {
+    text-decoration: underline;
+  }
+
   .sl-tooltip-bubble {
-    position: absolute;
-    inset: unset;
+    position: fixed;
+    inset: auto;
     margin: 0;
-    top: anchor(bottom);
-    left: anchor(center);
-    translate: -50% 0.4rem;
-    max-width: min(22rem, 90vw);
+    max-width: min(22rem, calc(100vw - 1.5rem));
     padding: 0.6rem 0.85rem;
     border-radius: 0.4rem;
     border: 1px solid var(--sl-color-gray-5);
@@ -76,45 +88,80 @@ const displayText = label ?? term.toUpperCase();
     line-height: 1.5;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 100;
-    transition-property: display, overlay, opacity, translate;
+    transition-property: display, overlay, opacity;
     transition-duration: 0.15s;
     transition-behavior: allow-discrete;
     opacity: 0;
+    visibility: hidden;
   }
 
   .sl-tooltip-bubble:popover-open {
     opacity: 1;
-    translate: -50% 0.4rem;
+    visibility: visible;
   }
 
   @starting-style {
     .sl-tooltip-bubble:popover-open {
       opacity: 0;
-      translate: -50% -0.2rem;
     }
   }
 </style>
 
 <script>
+  const VIEWPORT_PADDING = 12;
+  const GAP = 8;
+  const boundTriggers = new WeakSet<HTMLButtonElement>();
+
+  function positionBubble(trigger: HTMLElement, bubble: HTMLElement) {
+    const rect = trigger.getBoundingClientRect();
+    const width = bubble.offsetWidth;
+    const height = bubble.offsetHeight;
+
+    let top = rect.bottom + GAP;
+    if (top + height > window.innerHeight - VIEWPORT_PADDING) {
+      top = rect.top - height - GAP;
+    }
+    top = Math.max(
+      VIEWPORT_PADDING,
+      Math.min(top, window.innerHeight - height - VIEWPORT_PADDING),
+    );
+
+    const centerX = rect.left + rect.width / 2;
+    const minCenter = VIEWPORT_PADDING + width / 2;
+    const maxCenter = window.innerWidth - VIEWPORT_PADDING - width / 2;
+    const left = Math.max(minCenter, Math.min(centerX, maxCenter));
+
+    bubble.style.position = "fixed";
+    bubble.style.top = `${top}px`;
+    bubble.style.left = `${left}px`;
+    bubble.style.transform = "translateX(-50%)";
+    bubble.style.translate = "none";
+  }
+
+  function bindTooltip(trigger: HTMLButtonElement, bubble: HTMLElement) {
+    if (boundTriggers.has(trigger)) return;
+    boundTriggers.add(trigger);
+
+    const reposition = () => {
+      if (!bubble.matches(":popover-open")) return;
+      requestAnimationFrame(() => positionBubble(trigger, bubble));
+    };
+
+    trigger.addEventListener("click", reposition);
+    bubble.addEventListener("toggle", (event) => {
+      if ((event as ToggleEvent).newState === "open") reposition();
+    });
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, { passive: true });
+  }
+
   function positionTooltips(root: Document | ShadowRoot = document) {
     root.querySelectorAll<HTMLButtonElement>(".sl-tooltip-trigger").forEach((trigger) => {
       const id = trigger.getAttribute("popovertarget");
       if (!id) return;
-      const bubble = document.getElementById(id) as HTMLElement | null;
+      const bubble = document.getElementById(id);
       if (!bubble) return;
-
-      trigger.addEventListener("click", () => {
-        requestAnimationFrame(() => {
-          if (!bubble.matches(":popover-open")) return;
-          const rect = trigger.getBoundingClientRect();
-          const scrollY = window.scrollY;
-          const scrollX = window.scrollX;
-          bubble.style.top = `${rect.bottom + scrollY + 6}px`;
-          bubble.style.left = `${rect.left + scrollX + rect.width / 2}px`;
-          bubble.style.transform = "translateX(-50%)";
-          bubble.style.position = "absolute";
-        });
-      });
+      bindTooltip(trigger, bubble);
     });
   }
 

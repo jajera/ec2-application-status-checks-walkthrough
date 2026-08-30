@@ -1,27 +1,26 @@
 # EC2 Application Status Checks Walkthrough
 
-[![Deploy to GitHub Pages](https://github.com/jajera/ec2-application-status-checks-walkthrough/actions/workflows/deploy.yml/badge.svg)](https://github.com/jajera/ec2-application-status-checks-walkthrough/actions/workflows/deploy.yml)
+CLI walkthrough for Amazon EC2 application status checks — in-VPC HTTP probes, Auto Scaling replacement, pricing, and quotas.
 
-## Deployed site
+**Site:** https://ec2-application-status-checks-walkthrough.johna.kiwi/
 
-**https://ec2-application-status-checks-walkthrough.johna.kiwi/**
-
-## Local development
+## Quick start
 
 ```bash
-nvm use
 npm install
 npm run dev
 ```
 
-## npm scripts
+Open the local preview URL (usually http://localhost:4321/).
 
-| Script     | Description                  |
-| ---------- | ---------------------------- |
-| `dev`      | Local development server     |
-| `build`    | Production build to `dist/`  |
-| `preview`  | Preview production build     |
-| `validate` | Prettier and markdownlint    |
-| `format`   | Format all files             |
-| `lint`     | Lint MDX                     |
-| `test`     | Property-based content tests |
+## Structure
+
+```text
+src/content/docs/     Walkthrough (Astro Starlight)
+public/               Favicon, CNAME, OG image, screenshots
+AGENTS.md             Notes for coding agents
+```
+
+## License
+
+See [LICENSE](LICENSE).

@@ -1,6 +1,5 @@
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
-import starlightThemeVintage from "starlight-theme-vintage";
 import { starlightBasePath } from "starlight-base-path";
 
 export default defineConfig({
@@ -12,12 +11,13 @@ export default defineConfig({
       favicon: "/favicon.svg",
       description:
         "CLI walkthrough for Amazon EC2 application status checks — in-VPC HTTP probes, Auto Scaling replacement, pricing, and quotas.",
+      plugins: [starlightBasePath()],
+      routeMiddleware: "./src/routeData.ts",
+      customCss: ["./src/styles/patina-tokens.css", "./src/styles/splash-overrides.css"],
       components: {
+        ThemeSelect: "./src/components/ThemeSelect.astro",
         Head: "./src/components/Head.astro",
       },
-      plugins: [starlightThemeVintage(), starlightBasePath()],
-      routeMiddleware: "./src/routeData.ts",
-      customCss: ["./src/styles/splash-overrides.css"],
       social: [
         {
           icon: "github",

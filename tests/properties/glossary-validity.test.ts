@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { glossary } from "../../src/data/glossary";
+import { glossary, resolveGlossaryEntry } from "../../src/data/glossary";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -27,8 +27,9 @@ describe("Glossary validity", () => {
   it("has non-empty string definitions for every key", () => {
     expect(keys.length).toBeGreaterThan(5);
     for (const key of keys) {
-      expect(typeof glossary[key]).toBe("string");
-      expect(glossary[key].trim().length).toBeGreaterThan(10);
+      const { definition } = resolveGlossaryEntry(glossary[key]);
+      expect(typeof definition).toBe("string");
+      expect(definition!.trim().length).toBeGreaterThan(10);
     }
   });
 
