@@ -1,11 +1,32 @@
-export const glossary: Record<string, string> = {
+export type GlossaryEntry =
+  | string
+  | {
+      definition: string;
+      url?: string;
+      urlLabel?: string;
+    };
+
+export const glossary: Record<string, GlossaryEntry> = {
   aggregation:
     "Whether a check contributes to instance-level overall application status. included can drive Auto Scaling on impaired; excluded still reports per-check status.",
-  alb: "Application Load Balancer — steers traffic with its own target-group health checks. Complementary to application status checks, which decide whether the instance should exist.",
-  "application-status-check":
-    "Opt-in EC2 HTTP or HTTPS probe (every 60 seconds, HTTP/2) from a managed ENI in your VPC. Reports next to system, instance, and attached EBS status checks. Port is 1–65535, not only 80/443.",
-  "auto-scaling":
-    "Amazon EC2 Auto Scaling. With aggregation included, the group replaces instances whose overall application status is impaired — no extra HealthCheckType.",
+  alb: {
+    definition:
+      "Application Load Balancer — steers traffic with its own target-group health checks. Complementary to application status checks, which decide whether the instance should exist.",
+    url: "https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html",
+    urlLabel: "ALB docs",
+  },
+  "application-status-check": {
+    definition:
+      "Opt-in EC2 HTTP or HTTPS probe (every 60 seconds, HTTP/2) from a managed ENI in your VPC. Reports next to system, instance, and attached EBS status checks. Port is 1–65535, not only 80/443.",
+    url: "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/monitoring-system-instance-status-check.html",
+    urlLabel: "EC2 status checks docs",
+  },
+  "auto-scaling": {
+    definition:
+      "Amazon EC2 Auto Scaling. With aggregation included, the group replaces instances whose overall application status is impaired — no extra HealthCheckType.",
+    url: "https://docs.aws.amazon.com/autoscaling/ec2/userguide/what-is-amazon-ec2-auto-scaling.html",
+    urlLabel: "Auto Scaling docs",
+  },
   "aws-managed-path":
     "Default network path: omit --health-check-paths and AWS chooses the source subnet and security group for the managed ENI.",
   "customer-managed-path":
@@ -25,3 +46,15 @@ export const glossary: Record<string, string> = {
   suppression:
     "Pause evaluation on an instance for a duration so deploys and reboots do not look impaired.",
 };
+
+export function resolveGlossaryEntry(entry: GlossaryEntry | undefined) {
+  if (!entry) return { definition: undefined, url: undefined, urlLabel: undefined };
+  if (typeof entry === "string") {
+    return { definition: entry, url: undefined, urlLabel: undefined };
+  }
+  return {
+    definition: entry.definition,
+    url: entry.url,
+    urlLabel: entry.urlLabel ?? entry.url,
+  };
+}
