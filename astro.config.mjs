@@ -12,6 +12,9 @@ export default defineConfig({
       favicon: "/favicon.svg",
       description:
         "CLI walkthrough for Amazon EC2 application status checks — in-VPC HTTP probes, Auto Scaling replacement, pricing, and quotas.",
+      components: {
+        Head: "./src/components/Head.astro",
+      },
       plugins: [starlightThemeVintage(), starlightBasePath()],
       routeMiddleware: "./src/routeData.ts",
       customCss: ["./src/styles/splash-overrides.css"],
