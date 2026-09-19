@@ -21,7 +21,7 @@
     "starlight-base-path": "^0.2.1"
   },
   "devDependencies": {
-    "fast-check": "^4.9.0",
+    "fast-check": "^4.10.0",
     "gray-matter": "^4.0.3",
     "markdownlint-cli2": "^0.23.2",
     "prettier": "^3.5.3",
