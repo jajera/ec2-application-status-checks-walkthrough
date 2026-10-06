@@ -21,12 +21,12 @@
     "starlight-base-path": "^0.2.1"
   },
   "devDependencies": {
-    "fast-check": "^4.10.1",
+    "fast-check": "^4.10.2",
     "gray-matter": "^4.0.3",
-    "markdownlint-cli2": "^0.23.2",
-    "prettier": "^3.9.8",
-    "tsx": "^4.23.13",
-    "vitest": "^5.0.1"
+    "markdownlint-cli2": "^0.23.3",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.3"
   },
   "overrides": {
     "esbuild": "^0.28.1"
